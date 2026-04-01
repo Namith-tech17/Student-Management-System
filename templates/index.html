@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Student Management System</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- ICONS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+    <!-- GOOGLE FONT -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;600&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: white;
+        }
+
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 40px;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .navbar h2 {
+            font-weight: 600;
+        }
+
+        .nav-buttons a {
+            margin-left: 10px;
+            padding: 8px 14px;
+            border-radius: 6px;
+            text-decoration: none;
+            color: white;
+            font-size: 14px;
+        }
+
+        .add { background: #00c6ff; }
+        .export { background: #28a745; }
+        .logout { background: #dc3545; }
+
+        .container {
+            padding: 30px;
+        }
+
+        .card {
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(15px);
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+
+        input {
+            padding: 10px;
+            border-radius: 8px;
+            border: none;
+            margin: 5px;
+        }
+
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px;
+            background: #00c6ff;
+            color: white;
+            cursor: pointer;
+        }
+
+        .chart-box {
+            width: 250px;
+            height: 250px;
+            margin: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th {
+            background: rgba(255,255,255,0.2);
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: center;
+        }
+
+        tr {
+            background: rgba(255,255,255,0.05);
+        }
+
+        tr:hover {
+            background: rgba(255,255,255,0.15);
+        }
+
+        .action a {
+            margin: 0 5px;
+            color: white;
+            text-decoration: none;
+            font-size: 16px;
+        }
+
+    </style>
+</head>
+
+<body>
+
+<div class="navbar">
+    <h2>🎓 Student System</h2>
+
+    <div class="nav-buttons">
+        <a href="/add" class="add"><i class="fa fa-user-plus"></i></a>
+        <a href="/export" class="export"><i class="fa fa-file-excel"></i></a>
+        <a href="/logout" class="logout"><i class="fa fa-sign-out-alt"></i></a>
+    </div>
+</div>
+
+<div class="container">
+
+    <div class="card controls">
+
+        <input type="text" id="search" placeholder="🔍 Search student..." onkeyup="searchTable()">
+
+        <form method="POST">
+            <input type="date" name="date" value="{{ selected_date }}">
+            <button>Load</button>
+        </form>
+
+    </div>
+
+    <div class="card">
+        <h3 style="text-align:center;">Attendance Overview</h3>
+
+        <div class="chart-box">
+            <canvas id="chart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <table id="table">
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>USN</th>
+                <th>Attendance %</th> <!-- ✅ ADDED -->
+                <th>Actions</th>
+            </tr>
+
+            {% for s in students %}
+            <tr>
+                <td>{{ s[0] }}</td>
+                <td>{{ s[1] }}</td>
+                <td>{{ s[2] }}</td>
+                <td>{{ s[3] }}%</td> <!-- ✅ ADDED -->
+                <td class="action">
+                    <a href="/present/{{ s[0] }}/{{ selected_date }}">✔</a>
+                    <a href="/absent/{{ s[0] }}/{{ selected_date }}">❌</a>
+                    <a href="/edit/{{ s[0] }}">✏</a>
+                    <a href="/delete/{{ s[0] }}">🗑</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+
+</div>
+
+<script>
+new Chart(document.getElementById('chart'), {
+    type: 'doughnut',
+    data: {
+        labels: ['Present', 'Absent'],
+        datasets: [{
+            data: [{{ present }}, {{ absent }}],
+            backgroundColor: ['#28a745', '#dc3545']
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false
+    }
+});
+
+function searchTable() {
+    let input = document.getElementById("search").value.toLowerCase();
+    let rows = document.querySelectorAll("#table tr");
+
+    rows.forEach((row, index) => {
+        if (index === 0) return;
+
+        let text = row.innerText.toLowerCase();
+        row.style.display = text.includes(input) ? "" : "none";
+    });
+}
+</script>
+
+</body>
+</html>
