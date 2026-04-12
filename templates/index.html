@@ -118,6 +118,23 @@
             font-size: 16px;
         }
 
+        /* 🔥 PROGRESS BAR */
+        .progress-bar {
+            width: 100px;
+            background: #ddd;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: auto;
+        }
+
+        .progress-fill {
+            height: 10px;
+            background: green;
+        }
+
+        .low { color: #ff4d4d; }
+        .good { color: #90ee90; }
+
     </style>
 </head>
 
@@ -160,7 +177,9 @@
                 <th>ID</th>
                 <th>Name</th>
                 <th>USN</th>
-                <th>Attendance %</th> <!-- ✅ ADDED -->
+                <th>Attendance %</th>
+                <th>Status</th>
+                <th>Progress</th>
                 <th>Actions</th>
             </tr>
 
@@ -169,7 +188,22 @@
                 <td>{{ s[0] }}</td>
                 <td>{{ s[1] }}</td>
                 <td>{{ s[2] }}</td>
-                <td>{{ s[3] }}%</td> <!-- ✅ ADDED -->
+
+                <!-- 🔥 COLORED PERCENT -->
+                <td class="{% if s[3] < 75 %}low{% else %}good{% endif %}">
+                    {{ s[3] }}%
+                </td>
+
+                <!-- 🔥 STATUS -->
+                <td>{{ s[4] }}</td>
+
+                <!-- 🔥 PROGRESS BAR -->
+                <td>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: {{ s[3] }}%; background: {% if s[3] < 75 %}red{% else %}green{% endif %};"></div>
+                    </div>
+                </td>
+
                 <td class="action">
                     <a href="/present/{{ s[0] }}/{{ selected_date }}">✔</a>
                     <a href="/absent/{{ s[0] }}/{{ selected_date }}">❌</a>
