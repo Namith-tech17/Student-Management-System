@@ -2,9 +2,11 @@ from flask import Flask, render_template, request, redirect, session, send_file
 import sqlite3
 import datetime
 import pandas as pd
+import bcrypt
+import os
 
 app = Flask(__name__)
-app.secret_key = "secret123"
+app.secret_key = os.environ.get("SECRET_KEY", "fallback_secret")
 
 
 # 🔹 DATABASE
@@ -29,10 +31,37 @@ def init_db():
         )
     ''')
 
+    # 🔐 USERS TABLE
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            password BLOB
+        )
+    ''')
+
     conn.commit()
     conn.close()
 
 init_db()
+
+
+# 🔹 CREATE DEFAULT ADMIN (RUNS ONCE)
+def create_admin():
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM users WHERE username='admin'")
+    if not cursor.fetchone():
+        password = "1234".encode('utf-8')
+        hashed = bcrypt.hashpw(password, bcrypt.gensalt())
+
+        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("admin", hashed))
+        conn.commit()
+
+    conn.close()
+
+create_admin()
 
 
 # 🔹 LOGIN
@@ -46,7 +75,15 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
 
-        if username == "admin" and password == "1234":
+        conn = sqlite3.connect('database.db')
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT password FROM users WHERE username=?", (username,))
+        user = cursor.fetchone()
+
+        conn.close()
+
+        if user and bcrypt.checkpw(password.encode('utf-8'), user[0]):
             session['user'] = username
             return redirect('/dashboard')
         else:
