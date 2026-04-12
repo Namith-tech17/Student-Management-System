@@ -29,13 +29,22 @@ def init_db():
         )
     ''')
 
+    # ✅ USERS TABLE (NEW)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT,
+            password TEXT
+        )
+    ''')
+
     conn.commit()
     conn.close()
 
 init_db()
 
 
-# 🔹 LOGIN
+# 🔹 LOGIN (FIXED ✅)
 @app.route('/', methods=['GET', 'POST'])
 def login():
 
@@ -46,7 +55,15 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
 
-        if username == "admin" and password == "1234":
+        conn = sqlite3.connect('database.db')
+        c = conn.cursor()
+
+        c.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
+        user = c.fetchone()
+
+        conn.close()
+
+        if user:
             session['user'] = username
             return redirect('/dashboard')
         else:
