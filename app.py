@@ -5,8 +5,15 @@ import pandas as pd
 import bcrypt
 import os
 
+# 🔹 Import Blueprint (ONLY HERE)
+from routes.history import history_bp
+
+# 🔹 Create Flask App FIRST
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "fallback_secret")
+
+# 🔹 Register Blueprint AFTER app creation
+app.register_blueprint(history_bp)
 
 
 # 🔹 DATABASE
@@ -113,6 +120,36 @@ def dashboard():
     cursor.execute("SELECT COUNT(*) FROM attendance WHERE date=? AND status='Absent'", (selected_date,))
     absent = cursor.fetchone()[0]
 
+    # 🔥 SMART ATTENDANCE LOGIC
+    at_risk_students = []
+    student_data = []
+
+    for s in students:
+        cursor.execute("SELECT COUNT(*) FROM attendance WHERE student_id=?", (s[0],))
+        total = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM attendance WHERE student_id=? AND status='Present'", (s[0],))
+        pres = cursor.fetchone()[0]
+
+        percent = round((pres / total) * 100, 2) if total > 0 else 0
+
+        # 🔥 Risk detection
+        if percent < 75:
+            risk = "⚠️ At Risk"
+            at_risk_students.append((s[1], percent))
+        else:
+            risk = "✅ Good"
+
+        student_data.append((s[0], s[1], s[2], percent, risk))
+
+    conn.close()
+
+    return render_template('index.html',
+                           students=student_data,
+                           selected_date=selected_date,
+                           present=present,
+                           absent=absent,
+                           at_risk=at_risk_students)
     # 🔥 ATTENDANCE %
     student_data = []
     for s in students:
