@@ -5,8 +5,15 @@ import pandas as pd
 import bcrypt
 import os
 
+# 🔹 Import Blueprint (ONLY HERE)
+from routes.history import history_bp
+
+# 🔹 Create Flask App FIRST
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "fallback_secret")
+
+# 🔹 Register Blueprint AFTER app creation
+app.register_blueprint(history_bp)
 
 
 # 🔹 DATABASE
