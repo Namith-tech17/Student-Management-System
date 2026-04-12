@@ -1,3 +1,8 @@
+from dotenv import load_dotenv
+load_dotenv()
+
+import smtplib
+from email.mime.text import MIMEText
 from flask import Flask, render_template, request, redirect, session, send_file
 import sqlite3
 import datetime
@@ -6,11 +11,33 @@ import bcrypt
 import os
 
 app = Flask(__name__)
-<<<<<<< HEAD
-app.secret_key = os.environ.get("SECRET_KEY", "fallback_secret")
-=======
 app.secret_key = os.environ.get("SECRET_KEY", "secret123")
->>>>>>> login-system
+
+EMAIL_USER = os.getenv("EMAIL_USER")
+EMAIL_PASS = os.getenv("EMAIL_PASS")
+EMAIL_ENABLED = True
+
+
+# 🔥 EMAIL FUNCTION
+def send_email(to_email, subject, message):
+    if not EMAIL_ENABLED:
+        return
+
+    try:
+        msg = MIMEText(message)
+        msg['Subject'] = subject
+        msg['From'] = EMAIL_USER
+        msg['To'] = to_email
+
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(EMAIL_USER, EMAIL_PASS)
+        server.send_message(msg)
+        server.quit()
+
+        print(f"Email sent to {to_email}")
+    except Exception as e:
+        print("Email error:", e)
 
 
 # 🔹 DATABASE
@@ -22,7 +49,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS students (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT,
-            usn TEXT
+            usn TEXT,
+            email TEXT
         )
     ''')
 
@@ -35,7 +63,6 @@ def init_db():
         )
     ''')
 
-    # 🔐 USERS TABLE
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,31 +74,23 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 init_db()
 
 
-<<<<<<< HEAD
-# 🔹 CREATE DEFAULT ADMIN (RUNS ONCE)
-=======
-# 🔹 CREATE DEFAULT ADMIN
->>>>>>> login-system
+# 🔹 DEFAULT ADMIN
 def create_admin():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
 
     cursor.execute("SELECT * FROM users WHERE username='admin'")
     if not cursor.fetchone():
-<<<<<<< HEAD
-        password = "1234".encode('utf-8')
-        hashed = bcrypt.hashpw(password, bcrypt.gensalt())
-
-=======
         hashed = bcrypt.hashpw("1234".encode('utf-8'), bcrypt.gensalt())
->>>>>>> login-system
         cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("admin", hashed))
         conn.commit()
 
     conn.close()
+
 
 create_admin()
 
@@ -79,15 +98,11 @@ create_admin()
 # 🔹 LOGIN
 @app.route('/', methods=['GET', 'POST'])
 def login():
-
     if 'user' in session:
         return redirect('/dashboard')
 
-<<<<<<< HEAD
-=======
     error = None
 
->>>>>>> login-system
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -104,17 +119,12 @@ def login():
             session['user'] = username
             return redirect('/dashboard')
         else:
-<<<<<<< HEAD
-            return "Wrong Username or Password ❌"
-
-    return render_template('login.html')
-=======
             error = "Wrong Username or Password ❌"
 
     return render_template('login.html', error=error)
 
 
-# 🔥 REGISTER (NEW FEATURE)
+# 🔥 REGISTER
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -137,7 +147,6 @@ def register():
         return redirect('/')
 
     return render_template('register.html')
->>>>>>> login-system
 
 
 # 🔹 DASHBOARD
@@ -154,24 +163,15 @@ def dashboard():
     cursor.execute("SELECT * FROM students")
     students = cursor.fetchall()
 
-<<<<<<< HEAD
-    # 📊 COUNT
-=======
->>>>>>> login-system
     cursor.execute("SELECT COUNT(*) FROM attendance WHERE date=? AND status='Present'", (selected_date,))
     present = cursor.fetchone()[0]
 
     cursor.execute("SELECT COUNT(*) FROM attendance WHERE date=? AND status='Absent'", (selected_date,))
     absent = cursor.fetchone()[0]
 
-<<<<<<< HEAD
-    # 🔥 ATTENDANCE %
-    student_data = []
-=======
     student_data = []
     at_risk_students = []
 
->>>>>>> login-system
     for s in students:
         cursor.execute("SELECT COUNT(*) FROM attendance WHERE student_id=?", (s[0],))
         total = cursor.fetchone()[0]
@@ -181,38 +181,32 @@ def dashboard():
 
         percent = round((pres / total) * 100, 2) if total > 0 else 0
 
-<<<<<<< HEAD
-        student_data.append((s[0], s[1], s[2], percent))
-=======
         if percent < 75:
             risk = "⚠️ At Risk"
             at_risk_students.append((s[1], percent))
+
+            # 🔥 SEND EMAIL
+            if s[3]:  # email column
+                send_email(
+                    s[3],
+                    "Low Attendance Warning ⚠️",
+                    f"Your attendance is {percent}%.\nMinimum required is 75%.\nPlease improve."
+                )
         else:
             risk = "✅ Good"
 
         student_data.append((s[0], s[1], s[2], percent, risk))
->>>>>>> login-system
 
     conn.close()
 
-    return render_template('index.html',
-                           students=student_data,
-                           selected_date=selected_date,
-                           present=present,
-<<<<<<< HEAD
-                           absent=absent)
-=======
-                           absent=absent,
-                           at_risk=at_risk_students)
->>>>>>> login-system
-
-
-# 🔹 ADD PAGE
-@app.route('/add')
-def add():
-    if 'user' not in session:
-        return redirect('/')
-    return render_template('add.html')
+    return render_template(
+        'index.html',
+        students=student_data,
+        selected_date=selected_date,
+        present=present,
+        absent=absent,
+        at_risk=at_risk_students
+    )
 
 
 # 🔹 ADD STUDENT
@@ -223,11 +217,12 @@ def add_student():
 
     name = request.form['name']
     usn = request.form['usn']
+    email = request.form.get('email')
 
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
 
-    cursor.execute("INSERT INTO students (name, usn) VALUES (?, ?)", (name, usn))
+    cursor.execute("INSERT INTO students (name, usn, email) VALUES (?, ?, ?)", (name, usn, email))
 
     conn.commit()
     conn.close()
@@ -235,75 +230,7 @@ def add_student():
     return redirect('/dashboard')
 
 
-# 🔹 EDIT
-@app.route('/edit/<int:id>')
-def edit(id):
-    if 'user' not in session:
-        return redirect('/')
-
-    conn = sqlite3.connect('database.db')
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM students WHERE id=?", (id,))
-    student = cursor.fetchone()
-
-    conn.close()
-
-    return render_template('edit.html', student=student)
-
-
-# 🔹 UPDATE
-@app.route('/update/<int:id>', methods=['POST'])
-def update(id):
-    if 'user' not in session:
-        return redirect('/')
-
-    name = request.form['name']
-    usn = request.form['usn']
-
-    conn = sqlite3.connect('database.db')
-    cursor = conn.cursor()
-
-    cursor.execute("UPDATE students SET name=?, usn=? WHERE id=?", (name, usn, id))
-
-    conn.commit()
-    conn.close()
-
-    return redirect('/dashboard')
-
-
-<<<<<<< HEAD
-# 🔥 FIX DUPLICATE (PRESENT)
-=======
-# 🔥 PRESENT
->>>>>>> login-system
-@app.route('/present/<int:id>/<date>')
-def present(id, date):
-    if 'user' not in session:
-        return redirect('/')
-
-    conn = sqlite3.connect('database.db')
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM attendance WHERE student_id=? AND date=?", (id, date))
-    existing = cursor.fetchone()
-
-    if existing:
-        cursor.execute("UPDATE attendance SET status='Present' WHERE student_id=? AND date=?", (id, date))
-    else:
-        cursor.execute("INSERT INTO attendance (student_id, date, status) VALUES (?, ?, 'Present')", (id, date))
-
-    conn.commit()
-    conn.close()
-
-    return redirect('/dashboard')
-
-
-<<<<<<< HEAD
-# 🔥 FIX DUPLICATE (ABSENT)
-=======
-# 🔥 ABSENT
->>>>>>> login-system
+# 🔥 ABSENT + EMAIL
 @app.route('/absent/<int:id>/<date>')
 def absent(id, date):
     if 'user' not in session:
@@ -320,53 +247,23 @@ def absent(id, date):
     else:
         cursor.execute("INSERT INTO attendance (student_id, date, status) VALUES (?, ?, 'Absent')", (id, date))
 
-    conn.commit()
-    conn.close()
+    # 🔥 EMAIL ALERT
+    cursor.execute("SELECT name, email FROM students WHERE id=?", (id,))
+    student = cursor.fetchone()
 
-    return redirect('/dashboard')
+    if student and student[1]:
+        name, email = student
 
-
-# 🔹 DELETE
-@app.route('/delete/<int:id>')
-def delete(id):
-    if 'user' not in session:
-        return redirect('/')
-
-    conn = sqlite3.connect('database.db')
-    cursor = conn.cursor()
-
-    cursor.execute("DELETE FROM students WHERE id=?", (id,))
+        send_email(
+            email,
+            "Attendance Alert ❌",
+            f"Dear {name},\n\nYou were marked ABSENT on {date}.\nPlease attend regularly.\n\n- System"
+        )
 
     conn.commit()
     conn.close()
 
     return redirect('/dashboard')
-
-
-<<<<<<< HEAD
-# 🔥 EXCEL DOWNLOAD
-=======
-# 🔥 EXPORT
->>>>>>> login-system
-@app.route('/export')
-def export():
-    if 'user' not in session:
-        return redirect('/')
-
-    conn = sqlite3.connect('database.db')
-
-    df = pd.read_sql_query('''
-        SELECT students.name, students.usn, attendance.date, attendance.status
-        FROM attendance
-        JOIN students ON students.id = attendance.student_id
-    ''', conn)
-
-    file = "attendance.xlsx"
-    df.to_excel(file, index=False)
-
-    conn.close()
-
-    return send_file(file, as_attachment=True)
 
 
 # 🔹 LOGOUT
@@ -376,8 +273,5 @@ def logout():
     return redirect('/')
 
 
-<<<<<<< HEAD
-app.run(debug=True)
-=======
-app.run(debug=True)
->>>>>>> login-system
+if __name__ == "__main__":
+    app.run(debug=True)
