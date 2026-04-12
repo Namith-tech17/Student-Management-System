@@ -20,7 +20,7 @@ EMAIL_ENABLED = True
 
 # 🔥 EMAIL FUNCTION
 def send_email(to_email, subject, message):
-    if not EMAIL_ENABLED:
+    if not EMAIL_ENABLED or not to_email:
         return
 
     try:
@@ -163,6 +163,7 @@ def dashboard():
     cursor.execute("SELECT * FROM students")
     students = cursor.fetchall()
 
+    # 📊 COUNTS
     cursor.execute("SELECT COUNT(*) FROM attendance WHERE date=? AND status='Present'", (selected_date,))
     present = cursor.fetchone()[0]
 
@@ -173,29 +174,34 @@ def dashboard():
     at_risk_students = []
 
     for s in students:
-        cursor.execute("SELECT COUNT(*) FROM attendance WHERE student_id=?", (s[0],))
+        student_id, name, usn, email = s
+
+        # total classes
+        cursor.execute("SELECT COUNT(*) FROM attendance WHERE student_id=?", (student_id,))
         total = cursor.fetchone()[0]
 
-        cursor.execute("SELECT COUNT(*) FROM attendance WHERE student_id=? AND status='Present'", (s[0],))
-        pres = cursor.fetchone()[0]
+        # present classes
+        cursor.execute("SELECT COUNT(*) FROM attendance WHERE student_id=? AND status='Present'", (student_id,))
+        present_count = cursor.fetchone()[0]
 
-        percent = round((pres / total) * 100, 2) if total > 0 else 0
+        # percentage
+        percent = round((present_count / total) * 100, 2) if total > 0 else 0
 
+        # risk detection
         if percent < 75:
             risk = "⚠️ At Risk"
-            at_risk_students.append((s[1], percent))
+            at_risk_students.append((name, percent))
 
-            # 🔥 SEND EMAIL
-            if s[3]:  # email column
-                send_email(
-                    s[3],
-                    "Low Attendance Warning ⚠️",
-                    f"Your attendance is {percent}%.\nMinimum required is 75%.\nPlease improve."
-                )
+            # 🔥 EMAIL (only when needed)
+            send_email(
+                email,
+                "Low Attendance Warning ⚠️",
+                f"Your attendance is {percent}%.\nMinimum required is 75%.\nPlease improve."
+            )
         else:
             risk = "✅ Good"
 
-        student_data.append((s[0], s[1], s[2], percent, risk))
+        student_data.append((student_id, name, usn, percent, risk))
 
     conn.close()
 
@@ -222,7 +228,10 @@ def add_student():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
 
-    cursor.execute("INSERT INTO students (name, usn, email) VALUES (?, ?, ?)", (name, usn, email))
+    cursor.execute(
+        "INSERT INTO students (name, usn, email) VALUES (?, ?, ?)",
+        (name, usn, email)
+    )
 
     conn.commit()
     conn.close()
@@ -251,7 +260,7 @@ def absent(id, date):
     cursor.execute("SELECT name, email FROM students WHERE id=?", (id,))
     student = cursor.fetchone()
 
-    if student and student[1]:
+    if student:
         name, email = student
 
         send_email(
