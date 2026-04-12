@@ -2,9 +2,11 @@ from flask import Flask, render_template, request, redirect, session, send_file
 import sqlite3
 import datetime
 import pandas as pd
+import bcrypt
+import os
 
 app = Flask(__name__)
-app.secret_key = "secret123"
+app.secret_key = os.environ.get("SECRET_KEY", "secret123")
 
 
 # 🔹 DATABASE
@@ -29,12 +31,12 @@ def init_db():
         )
     ''')
 
-    # ✅ USERS TABLE (NEW)
+    # 🔐 USERS TABLE
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT,
-            password TEXT
+            username TEXT UNIQUE,
+            password BLOB
         )
     ''')
 
@@ -44,7 +46,25 @@ def init_db():
 init_db()
 
 
-# 🔹 LOGIN (FIXED ✅)
+# 🔹 CREATE DEFAULT ADMIN (RUNS ONCE)
+def create_admin():
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM users WHERE username='admin'")
+    if not cursor.fetchone():
+        password = "1234".encode('utf-8')
+        hashed = bcrypt.hashpw(password, bcrypt.gensalt())
+
+        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("admin", hashed))
+        conn.commit()
+
+    conn.close()
+
+create_admin()
+
+
+# 🔹 LOGIN
 @app.route('/', methods=['GET', 'POST'])
 def login():
 
@@ -56,14 +76,14 @@ def login():
         password = request.form.get('password')
 
         conn = sqlite3.connect('database.db')
-        c = conn.cursor()
+        cursor = conn.cursor()
 
-        c.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
-        user = c.fetchone()
+        cursor.execute("SELECT password FROM users WHERE username=?", (username,))
+        user = cursor.fetchone()
 
         conn.close()
 
-        if user:
+        if user and bcrypt.checkpw(password.encode('utf-8'), user[0]):
             session['user'] = username
             return redirect('/dashboard')
         else:
@@ -93,8 +113,10 @@ def dashboard():
     cursor.execute("SELECT COUNT(*) FROM attendance WHERE date=? AND status='Absent'", (selected_date,))
     absent = cursor.fetchone()[0]
 
-    # 🔥 ATTENDANCE %
+    # 🔥 ATTENDANCE + RISK
     student_data = []
+    at_risk_students = []
+
     for s in students:
         cursor.execute("SELECT COUNT(*) FROM attendance WHERE student_id=?", (s[0],))
         total = cursor.fetchone()[0]
@@ -104,7 +126,13 @@ def dashboard():
 
         percent = round((pres / total) * 100, 2) if total > 0 else 0
 
-        student_data.append((s[0], s[1], s[2], percent))
+        if percent < 75:
+            risk = "⚠️ At Risk"
+            at_risk_students.append((s[1], percent))
+        else:
+            risk = "✅ Good"
+
+        student_data.append((s[0], s[1], s[2], percent, risk))
 
     conn.close()
 
@@ -112,7 +140,8 @@ def dashboard():
                            students=student_data,
                            selected_date=selected_date,
                            present=present,
-                           absent=absent)
+                           absent=absent,
+                           at_risk=at_risk_students)
 
 
 # 🔹 ADD PAGE
@@ -180,7 +209,7 @@ def update(id):
     return redirect('/dashboard')
 
 
-# 🔥 FIX DUPLICATE (PRESENT)
+# 🔥 PRESENT
 @app.route('/present/<int:id>/<date>')
 def present(id, date):
     if 'user' not in session:
@@ -203,7 +232,7 @@ def present(id, date):
     return redirect('/dashboard')
 
 
-# 🔥 FIX DUPLICATE (ABSENT)
+# 🔥 ABSENT
 @app.route('/absent/<int:id>/<date>')
 def absent(id, date):
     if 'user' not in session:
@@ -243,7 +272,7 @@ def delete(id):
     return redirect('/dashboard')
 
 
-# 🔥 EXCEL DOWNLOAD
+# 🔥 EXPORT
 @app.route('/export')
 def export():
     if 'user' not in session:
