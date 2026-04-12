@@ -6,13 +6,7 @@ import bcrypt
 import os
 
 app = Flask(__name__)
-<<<<<<< HEAD
-app.secret_key = os.environ.get("SECRET_KEY", "fallback_secret")
-=======
 app.secret_key = os.environ.get("SECRET_KEY", "secret123")
->>>>>>> login-system
-
-
 # 🔹 DATABASE
 def init_db():
     conn = sqlite3.connect('database.db')
@@ -50,24 +44,18 @@ def init_db():
 init_db()
 
 
-<<<<<<< HEAD
 # 🔹 CREATE DEFAULT ADMIN (RUNS ONCE)
-=======
 # 🔹 CREATE DEFAULT ADMIN
->>>>>>> login-system
 def create_admin():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
 
     cursor.execute("SELECT * FROM users WHERE username='admin'")
     if not cursor.fetchone():
-<<<<<<< HEAD
         password = "1234".encode('utf-8')
         hashed = bcrypt.hashpw(password, bcrypt.gensalt())
 
-=======
         hashed = bcrypt.hashpw("1234".encode('utf-8'), bcrypt.gensalt())
->>>>>>> login-system
         cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("admin", hashed))
         conn.commit()
 
@@ -83,11 +71,8 @@ def login():
     if 'user' in session:
         return redirect('/dashboard')
 
-<<<<<<< HEAD
-=======
     error = None
 
->>>>>>> login-system
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -104,15 +89,9 @@ def login():
             session['user'] = username
             return redirect('/dashboard')
         else:
-<<<<<<< HEAD
-            return "Wrong Username or Password ❌"
-
-    return render_template('login.html')
-=======
             error = "Wrong Username or Password ❌"
 
     return render_template('login.html', error=error)
-
 
 # 🔥 REGISTER (NEW FEATURE)
 @app.route('/register', methods=['GET', 'POST'])
@@ -137,7 +116,6 @@ def register():
         return redirect('/')
 
     return render_template('register.html')
->>>>>>> login-system
 
 
 # 🔹 DASHBOARD
@@ -154,24 +132,18 @@ def dashboard():
     cursor.execute("SELECT * FROM students")
     students = cursor.fetchall()
 
-<<<<<<< HEAD
     # 📊 COUNT
-=======
->>>>>>> login-system
     cursor.execute("SELECT COUNT(*) FROM attendance WHERE date=? AND status='Present'", (selected_date,))
     present = cursor.fetchone()[0]
 
     cursor.execute("SELECT COUNT(*) FROM attendance WHERE date=? AND status='Absent'", (selected_date,))
     absent = cursor.fetchone()[0]
 
-<<<<<<< HEAD
     # 🔥 ATTENDANCE %
     student_data = []
-=======
     student_data = []
     at_risk_students = []
 
->>>>>>> login-system
     for s in students:
         cursor.execute("SELECT COUNT(*) FROM attendance WHERE student_id=?", (s[0],))
         total = cursor.fetchone()[0]
@@ -181,9 +153,7 @@ def dashboard():
 
         percent = round((pres / total) * 100, 2) if total > 0 else 0
 
-<<<<<<< HEAD
         student_data.append((s[0], s[1], s[2], percent))
-=======
         if percent < 75:
             risk = "⚠️ At Risk"
             at_risk_students.append((s[1], percent))
@@ -191,21 +161,17 @@ def dashboard():
             risk = "✅ Good"
 
         student_data.append((s[0], s[1], s[2], percent, risk))
->>>>>>> login-system
 
     conn.close()
 
-    return render_template('index.html',
-                           students=student_data,
-                           selected_date=selected_date,
-                           present=present,
-<<<<<<< HEAD
-                           absent=absent)
-=======
-                           absent=absent,
-                           at_risk=at_risk_students)
->>>>>>> login-system
-
+    return render_template(
+    'index.html',
+    students=student_data,
+    selected_date=selected_date,
+    present=present,
+    absent=absent,
+    at_risk=at_risk_students
+)
 
 # 🔹 ADD PAGE
 @app.route('/add')
@@ -272,11 +238,8 @@ def update(id):
     return redirect('/dashboard')
 
 
-<<<<<<< HEAD
 # 🔥 FIX DUPLICATE (PRESENT)
-=======
 # 🔥 PRESENT
->>>>>>> login-system
 @app.route('/present/<int:id>/<date>')
 def present(id, date):
     if 'user' not in session:
@@ -299,11 +262,8 @@ def present(id, date):
     return redirect('/dashboard')
 
 
-<<<<<<< HEAD
 # 🔥 FIX DUPLICATE (ABSENT)
-=======
 # 🔥 ABSENT
->>>>>>> login-system
 @app.route('/absent/<int:id>/<date>')
 def absent(id, date):
     if 'user' not in session:
@@ -343,11 +303,8 @@ def delete(id):
     return redirect('/dashboard')
 
 
-<<<<<<< HEAD
 # 🔥 EXCEL DOWNLOAD
-=======
 # 🔥 EXPORT
->>>>>>> login-system
 @app.route('/export')
 def export():
     if 'user' not in session:
@@ -376,8 +333,5 @@ def logout():
     return redirect('/')
 
 
-<<<<<<< HEAD
 app.run(debug=True)
-=======
 app.run(debug=True)
->>>>>>> login-system
