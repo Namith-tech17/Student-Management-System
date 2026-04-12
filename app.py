@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import csv
 import smtplib
 from email.mime.text import MIMEText
 from flask import Flask, render_template, request, redirect, session, send_file
@@ -75,7 +76,60 @@ def init_db():
     conn.close()
 
 
-init_db()
+# 🔹 IMPORT STUDENTS CSV
+def import_students():
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM students")
+    if cursor.fetchone()[0] > 0:
+        conn.close()
+        return
+
+    try:
+        with open('students.csv', 'r') as file:
+            reader = csv.DictReader(file)
+
+            for row in reader:
+                cursor.execute(
+                    "INSERT INTO students (name, usn, email) VALUES (?, ?, ?)",
+                    (row.get('name'), row.get('usn'), row.get('email'))
+                )
+
+        conn.commit()
+
+    except Exception as e:
+        print("Student CSV Error:", e)
+
+    conn.close()
+
+
+# 🔥 IMPORT ATTENDANCE CSV (NEW)
+def import_attendance():
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM attendance")
+    if cursor.fetchone()[0] > 0:
+        conn.close()
+        return
+
+    try:
+        with open('attendance.csv', 'r') as file:
+            reader = csv.DictReader(file)
+
+            for row in reader:
+                cursor.execute(
+                    "INSERT INTO attendance (student_id, date, status) VALUES (?, ?, ?)",
+                    (row.get('student_id'), row.get('date'), row.get('status'))
+                )
+
+        conn.commit()
+
+    except Exception as e:
+        print("Attendance CSV Error:", e)
+
+    conn.close()
 
 
 # 🔹 DEFAULT ADMIN
@@ -92,7 +146,11 @@ def create_admin():
     conn.close()
 
 
+# 🔥 CORRECT EXECUTION ORDER
+init_db()
 create_admin()
+import_students()
+import_attendance()
 
 
 # 🔹 LOGIN
@@ -124,31 +182,6 @@ def login():
     return render_template('login.html', error=error)
 
 
-# 🔥 REGISTER
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-
-        conn = sqlite3.connect('database.db')
-        cursor = conn.cursor()
-
-        hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-
-        try:
-            cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed))
-            conn.commit()
-        except sqlite3.IntegrityError:
-            conn.close()
-            return "User already exists ❌"
-
-        conn.close()
-        return redirect('/')
-
-    return render_template('register.html')
-
-
 # 🔹 DASHBOARD
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():
@@ -163,7 +196,6 @@ def dashboard():
     cursor.execute("SELECT * FROM students")
     students = cursor.fetchall()
 
-    # 📊 COUNTS
     cursor.execute("SELECT COUNT(*) FROM attendance WHERE date=? AND status='Present'", (selected_date,))
     present = cursor.fetchone()[0]
 
@@ -176,23 +208,18 @@ def dashboard():
     for s in students:
         student_id, name, usn, email = s
 
-        # total classes
         cursor.execute("SELECT COUNT(*) FROM attendance WHERE student_id=?", (student_id,))
         total = cursor.fetchone()[0]
 
-        # present classes
         cursor.execute("SELECT COUNT(*) FROM attendance WHERE student_id=? AND status='Present'", (student_id,))
         present_count = cursor.fetchone()[0]
 
-        # percentage
         percent = round((present_count / total) * 100, 2) if total > 0 else 0
 
-        # risk detection
         if percent < 75:
             risk = "⚠️ At Risk"
             at_risk_students.append((name, percent))
 
-            # 🔥 EMAIL (only when needed)
             send_email(
                 email,
                 "Low Attendance Warning ⚠️",
@@ -256,7 +283,6 @@ def absent(id, date):
     else:
         cursor.execute("INSERT INTO attendance (student_id, date, status) VALUES (?, ?, 'Absent')", (id, date))
 
-    # 🔥 EMAIL ALERT
     cursor.execute("SELECT name, email FROM students WHERE id=?", (id,))
     student = cursor.fetchone()
 
