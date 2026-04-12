@@ -46,16 +46,14 @@ def init_db():
 init_db()
 
 
-# 🔹 CREATE DEFAULT ADMIN (RUNS ONCE)
+# 🔹 CREATE DEFAULT ADMIN
 def create_admin():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
 
     cursor.execute("SELECT * FROM users WHERE username='admin'")
     if not cursor.fetchone():
-        password = "1234".encode('utf-8')
-        hashed = bcrypt.hashpw(password, bcrypt.gensalt())
-
+        hashed = bcrypt.hashpw("1234".encode('utf-8'), bcrypt.gensalt())
         cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("admin", hashed))
         conn.commit()
 
@@ -70,6 +68,8 @@ def login():
 
     if 'user' in session:
         return redirect('/dashboard')
+
+    error = None
 
     if request.method == 'POST':
         username = request.form.get('username')
@@ -87,9 +87,34 @@ def login():
             session['user'] = username
             return redirect('/dashboard')
         else:
-            return "Wrong Username or Password ❌"
+            error = "Wrong Username or Password ❌"
 
-    return render_template('login.html')
+    return render_template('login.html', error=error)
+
+
+# 🔥 REGISTER (NEW FEATURE)
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        conn = sqlite3.connect('database.db')
+        cursor = conn.cursor()
+
+        hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+        try:
+            cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.close()
+            return "User already exists ❌"
+
+        conn.close()
+        return redirect('/')
+
+    return render_template('register.html')
 
 
 # 🔹 DASHBOARD
@@ -106,14 +131,12 @@ def dashboard():
     cursor.execute("SELECT * FROM students")
     students = cursor.fetchall()
 
-    # 📊 COUNT
     cursor.execute("SELECT COUNT(*) FROM attendance WHERE date=? AND status='Present'", (selected_date,))
     present = cursor.fetchone()[0]
 
     cursor.execute("SELECT COUNT(*) FROM attendance WHERE date=? AND status='Absent'", (selected_date,))
     absent = cursor.fetchone()[0]
 
-    # 🔥 ATTENDANCE + RISK
     student_data = []
     at_risk_students = []
 
