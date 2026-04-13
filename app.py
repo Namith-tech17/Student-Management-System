@@ -18,6 +18,9 @@ EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASS = os.getenv("EMAIL_PASS")
 EMAIL_ENABLED = True
 
+# Track emails already sent today to avoid spamming students
+email_sent_today = set()  # stores (student_id, date) tuples
+
 
 # 🔥 EMAIL FUNCTION
 def send_email(to_email, subject, message):
@@ -132,17 +135,24 @@ def import_attendance():
     conn.close()
 
 
-# 🔹 DEFAULT ADMIN
+# 🔹 DEFAULT USERS
 def create_admin():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM users WHERE username='admin'")
-    if not cursor.fetchone():
-        hashed = bcrypt.hashpw("1234".encode('utf-8'), bcrypt.gensalt())
-        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("admin", hashed))
-        conn.commit()
+    users = [
+        ("admin",     "1234"),
+        ("teacher",   "teach1234"),
+        ("professor", "prof1234"),
+    ]
 
+    for username, password in users:
+        cursor.execute("SELECT * FROM users WHERE username=?", (username,))
+        if not cursor.fetchone():
+            hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+            cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed))
+
+    conn.commit()
     conn.close()
 
 
@@ -151,6 +161,30 @@ init_db()
 create_admin()
 import_students()
 import_attendance()
+
+
+# 🔹 REGISTER
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        conn = sqlite3.connect('database.db')
+        cursor = conn.cursor()
+        hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+        try:
+            cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.close()
+            return render_template('login.html', error="Username already exists ❌")
+
+        conn.close()
+        return redirect('/')
+
+    return render_template('register.html')
 
 
 # 🔹 LOGIN
@@ -220,11 +254,15 @@ def dashboard():
             risk = "⚠️ At Risk"
             at_risk_students.append((name, percent))
 
-            send_email(
-                email,
-                "Low Attendance Warning ⚠️",
-                f"Your attendance is {percent}%.\nMinimum required is 75%.\nPlease improve."
-            )
+            # 🔥 EMAIL — only once per student per day (not on every page load)
+            email_key = (student_id, selected_date)
+            if email_key not in email_sent_today:
+                email_sent_today.add(email_key)
+                send_email(
+                    email,
+                    "Low Attendance Warning ⚠️",
+                    f"Your attendance is {percent}%.\nMinimum required is 75%.\nPlease improve."
+                )
         else:
             risk = "✅ Good"
 
@@ -299,6 +337,111 @@ def absent(id, date):
     conn.close()
 
     return redirect('/dashboard')
+
+
+# 🔹 ADD STUDENT PAGE
+@app.route('/add')
+def add():
+    if 'user' not in session:
+        return redirect('/')
+    return render_template('add.html')
+
+
+# 🔹 PRESENT
+@app.route('/present/<int:id>/<date>')
+def present(id, date):
+    if 'user' not in session:
+        return redirect('/')
+
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM attendance WHERE student_id=? AND date=?", (id, date))
+    existing = cursor.fetchone()
+
+    if existing:
+        cursor.execute("UPDATE attendance SET status='Present' WHERE student_id=? AND date=?", (id, date))
+    else:
+        cursor.execute("INSERT INTO attendance (student_id, date, status) VALUES (?, ?, 'Present')", (id, date))
+
+    conn.commit()
+    conn.close()
+    return redirect('/dashboard')
+
+
+# 🔹 EDIT STUDENT PAGE
+@app.route('/edit/<int:id>')
+def edit(id):
+    if 'user' not in session:
+        return redirect('/')
+
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM students WHERE id=?", (id,))
+    student = cursor.fetchone()
+    conn.close()
+
+    return render_template('edit.html', student=student)
+
+
+# 🔹 UPDATE STUDENT
+@app.route('/update/<int:id>', methods=['POST'])
+def update(id):
+    if 'user' not in session:
+        return redirect('/')
+
+    name = request.form['name']
+    usn = request.form['usn']
+    email = request.form.get('email')
+
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE students SET name=?, usn=?, email=? WHERE id=?",
+        (name, usn, email, id)
+    )
+    conn.commit()
+    conn.close()
+
+    return redirect('/dashboard')
+
+
+# 🔹 DELETE STUDENT
+@app.route('/delete/<int:id>')
+def delete(id):
+    if 'user' not in session:
+        return redirect('/')
+
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM students WHERE id=?", (id,))
+    cursor.execute("DELETE FROM attendance WHERE student_id=?", (id,))
+    conn.commit()
+    conn.close()
+
+    return redirect('/dashboard')
+
+
+# 🔹 EXPORT ATTENDANCE AS EXCEL
+@app.route('/export')
+def export():
+    if 'user' not in session:
+        return redirect('/')
+
+    conn = sqlite3.connect('database.db')
+
+    df_students = pd.read_sql_query("SELECT * FROM students", conn)
+    df_attendance = pd.read_sql_query("SELECT * FROM attendance", conn)
+    conn.close()
+
+    df = pd.merge(df_attendance, df_students, left_on='student_id', right_on='id', suffixes=('_att', '_stu'))
+    df = df[['name', 'usn', 'email', 'date', 'status']]
+    df.columns = ['Name', 'USN', 'Email', 'Date', 'Status']
+
+    file_path = 'attendance_export.xlsx'
+    df.to_excel(file_path, index=False)
+
+    return send_file(file_path, as_attachment=True)
 
 
 # 🔹 LOGOUT
