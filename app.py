@@ -11,6 +11,10 @@ import pandas as pd
 import bcrypt
 import os
 
+# 🔹 Import Blueprint (ONLY HERE)
+from routes.history import history_bp
+
+# 🔹 Create Flask App FIRST
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "secret123")
 
@@ -42,6 +46,9 @@ def send_email(to_email, subject, message):
         print(f"Email sent to {to_email}")
     except Exception as e:
         print("Email error:", e)
+
+# 🔹 Register Blueprint AFTER app creation
+app.register_blueprint(history_bp)
 
 
 # 🔹 DATABASE
